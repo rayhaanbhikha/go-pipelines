@@ -3,17 +3,23 @@ package main
 import (
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
+	start := time.Now()
+
 	users := readData("./data-set.csv")
 
 	transform(users)
 
 	writeToFile("users.json", users)
+
+	fmt.Println("End: ", time.Since(start).String())
 }
 
 type user struct {
@@ -36,6 +42,7 @@ func readData(filePath string) []*user {
 	users := make([]*user, 0)
 	for {
 		data, err := csvReader.Read()
+		time.Sleep(time.Millisecond * 2e3)
 		if err == io.EOF {
 			break
 		}
@@ -49,6 +56,7 @@ func readData(filePath string) []*user {
 
 func transform(users []*user) {
 	for _, user := range users {
+		time.Sleep(time.Millisecond * 1e3)
 		user.FirstName = strings.ToUpper(user.FirstName)
 		user.LastName = strings.ToUpper(user.LastName)
 	}
@@ -60,9 +68,10 @@ func writeToFile(fileName string, users []*user) {
 	if err != nil {
 		panic(err)
 	}
-	file.Write([]byte{'['})
 	encoder := json.NewEncoder(file)
+	file.Write([]byte{'['})
 	for _, user := range users {
+		time.Sleep(time.Millisecond * 2e3)
 		err := encoder.Encode(user)
 		file.Write([]byte{','})
 		if err != nil {
