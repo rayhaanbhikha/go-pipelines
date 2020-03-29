@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -15,34 +16,43 @@ import (
 
 func main() {
 	start := time.Now()
-	users := genUserChannel("./data-set.csv")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10e3)
+	defer cancel()
+	users := genUserChannel(ctx, "./data-set.csv")
 
-	tU1 := transform(users)
-	tU2 := transform(users)
-	tU3 := transform(users)
-	tU5 := transform(users)
-	tU4 := transform(users)
+	tU1 := transform(ctx, users)
+	tU2 := transform(ctx, users)
+	tU3 := transform(ctx, users)
+	tU5 := transform(ctx, users)
+	tU4 := transform(ctx, users)
 
-	post(merge(tU1, tU2, tU3, tU4, tU5))
+	out := merge(ctx, tU1, tU2, tU3, tU4, tU5)
+	post(ctx, out)
 
 	fmt.Println("Elapsed time: ", time.Since(start))
 }
 
-func merge(input ...<-chan *user.User) <-chan *user.User {
+func merge(ctx context.Context, input ...<-chan *user.User) <-chan *user.User {
 
 	output := make(chan *user.User)
 
 	var wg sync.WaitGroup
 	wg.Add(len(input))
 
-	for _, inputChan := range input {
-		go func(inputChan <-chan *user.User) {
-			defer wg.Done()
-			fmt.Println("waiting")
-			for input := range inputChan {
-				output <- input
+	join := func(input <-chan *user.User) {
+		defer wg.Done()
+		fmt.Println("waiting")
+		for user := range input {
+			select {
+			case output <- user:
+			case <-ctx.Done():
+				return
 			}
-		}(inputChan)
+		}
+	}
+
+	for _, inputChan := range input {
+		go join(inputChan)
 	}
 
 	go func() {
@@ -53,8 +63,8 @@ func merge(input ...<-chan *user.User) <-chan *user.User {
 	return output
 }
 
-func genUserChannel(filePath string) <-chan *user.User {
-	file, err := os.Open("./data-set.csv")
+func genUserChannel(ctx context.Context, filePath string) <-chan *user.User {
+	file, err := os.Open(filePath)
 	if err != nil {
 		panic(err)
 	}
@@ -71,13 +81,18 @@ func genUserChannel(filePath string) <-chan *user.User {
 			if err != nil {
 				panic(err)
 			}
-			userChan <- user.NewUser(data)
+			select {
+			case userChan <- user.NewUser(data):
+			case <-ctx.Done():
+				fmt.Println(ctx.Err().Error())
+				break
+			}
 		}
 	}()
 	return userChan
 }
 
-func transform(users <-chan *user.User) <-chan *user.User {
+func transform(ctx context.Context, users <-chan *user.User) <-chan *user.User {
 	transformedUsers := make(chan *user.User)
 	go func() {
 		defer close(transformedUsers)
@@ -85,22 +100,31 @@ func transform(users <-chan *user.User) <-chan *user.User {
 			fmt.Println("transforming")
 			time.Sleep(time.Millisecond * 2e3)
 			user.Transform()
-			transformedUsers <- user
+			select {
+			case transformedUsers <- user:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return transformedUsers
 }
 
-func post(users <-chan *user.User) {
+func post(ctx context.Context, users <-chan *user.User) {
 	var wg sync.WaitGroup
 	for user := range users {
-		wg.Add(1)
-		user := user
-		go func() {
-			defer wg.Done()
-			fmt.Println("post user")
-			postUser(user)
-		}()
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			wg.Add(1)
+			user := user
+			go func() {
+				defer wg.Done()
+				fmt.Println("post user")
+				postUser(user)
+			}()
+		}
 	}
 	wg.Wait()
 }
