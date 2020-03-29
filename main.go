@@ -36,7 +36,6 @@ func genUserChannel(filePath string) <-chan *user.User {
 		defer close(userChan)
 		for {
 			data, err := csvReader.Read()
-			time.Sleep(time.Millisecond * 2e3)
 			if err == io.EOF {
 				break
 			}
@@ -54,7 +53,7 @@ func transform(users <-chan *user.User) <-chan *user.User {
 	go func() {
 		defer close(transformedUsers)
 		for user := range users {
-			time.Sleep(time.Millisecond * 1e3)
+			time.Sleep(time.Millisecond * 3e3)
 			user.Transform()
 			transformedUsers <- user
 		}
@@ -76,7 +75,7 @@ func post(users <-chan *user.User) {
 }
 
 func postUser(user *user.User) {
-	time.Sleep(2e3 * time.Millisecond)
+	time.Sleep(3e3 * time.Millisecond)
 	buf := bytes.NewReader(user.JSON())
 	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
 	if err != nil {
