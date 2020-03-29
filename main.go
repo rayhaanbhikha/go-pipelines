@@ -70,7 +70,7 @@ func writeToFile(fileName string, users []*user) {
 	}
 	encoder := json.NewEncoder(file)
 	file.Write([]byte{'['})
-	for _, user := range users {
+	for index, user := range users {
 		time.Sleep(time.Millisecond * 2e3)
 		err := encoder.Encode(user)
 		file.Write([]byte{','})
