@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/rayhaanbhikha/go-pipelines/user"
@@ -39,8 +38,7 @@ func main() {
 
 func transform(user *user.User) {
 	time.Sleep(time.Millisecond * 1e3)
-	user.FirstName = strings.ToUpper(user.FirstName)
-	user.LastName = strings.ToUpper(user.LastName)
+	user.Transform()
 }
 
 func postUser(user *user.User) {
