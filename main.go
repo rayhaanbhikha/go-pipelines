@@ -65,7 +65,6 @@ func genUserChannel(filePath string) <-chan *user.User {
 		defer close(userChan)
 		for {
 			data, err := csvReader.Read()
-			time.Sleep(time.Millisecond * 2e3)
 			if err == io.EOF {
 				break
 			}
