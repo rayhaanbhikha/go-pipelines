@@ -1,3 +1,2 @@
-users.json
-data-set.csv
-db.json
+*.json
+*.csv
