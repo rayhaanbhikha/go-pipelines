@@ -22,7 +22,6 @@ func main() {
 	csvReader := csv.NewReader(file)
 	for {
 		data, err := csvReader.Read()
-		time.Sleep(time.Millisecond * 2e3)
 		if err == io.EOF {
 			break
 		}
@@ -37,12 +36,12 @@ func main() {
 }
 
 func transform(user *user.User) {
-	time.Sleep(time.Millisecond * 1e3)
+	time.Sleep(time.Millisecond * 2e3)
 	user.Transform()
 }
 
 func postUser(user *user.User) {
-	time.Sleep(2e3 * time.Millisecond)
+	time.Sleep(3e3 * time.Millisecond)
 
 	buf := bytes.NewReader(user.JSON())
 	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
