@@ -83,7 +83,7 @@ func transform(users <-chan *user.User) <-chan *user.User {
 		defer close(transformedUsers)
 		for user := range users {
 			fmt.Println("transforming")
-			time.Sleep(time.Millisecond * 1e3)
+			time.Sleep(time.Millisecond * 2e3)
 			user.Transform()
 			transformedUsers <- user
 		}
@@ -106,7 +106,7 @@ func post(users <-chan *user.User) {
 }
 
 func postUser(user *user.User) {
-	time.Sleep(2e3 * time.Millisecond)
+	time.Sleep(3e3 * time.Millisecond)
 	buf := bytes.NewReader(user.JSON())
 	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
 	if err != nil {
