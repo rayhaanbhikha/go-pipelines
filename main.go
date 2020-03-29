@@ -1,45 +1,26 @@
 package main
 
 import (
+	"bytes"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/rayhaanbhikha/go-pipelines/user"
 )
 
 func main() {
 	start := time.Now()
-
-	users := readData("./data-set.csv")
-
-	transform(users)
-
-	writeToFile("users.json", users)
-
-	fmt.Println("End: ", time.Since(start).String())
-}
-
-type user struct {
-	FirstName string
-	LastName  string
-	Email     string
-}
-
-func NewUser(data []string) *user {
-	return &user{FirstName: data[0], LastName: data[1], Email: data[2]}
-}
-
-func readData(filePath string) []*user {
-	file, err := os.Open(filePath)
+	file, err := os.Open("./data-set.csv")
 	defer file.Close()
 	if err != nil {
 		panic(err)
 	}
 	csvReader := csv.NewReader(file)
-	users := make([]*user, 0)
 	for {
 		data, err := csvReader.Read()
 		time.Sleep(time.Millisecond * 2e3)
@@ -49,34 +30,26 @@ func readData(filePath string) []*user {
 		if err != nil {
 			panic(err)
 		}
-		users = append(users, NewUser(data))
+		user := user.NewUser(data)
+		transform(user)
+		postUser(user)
 	}
-	return users
+	fmt.Println("Elapsed time: ", time.Since(start))
 }
 
-func transform(users []*user) {
-	for _, user := range users {
-		time.Sleep(time.Millisecond * 1e3)
-		user.FirstName = strings.ToUpper(user.FirstName)
-		user.LastName = strings.ToUpper(user.LastName)
-	}
+func transform(user *user.User) {
+	time.Sleep(time.Millisecond * 1e3)
+	user.FirstName = strings.ToUpper(user.FirstName)
+	user.LastName = strings.ToUpper(user.LastName)
 }
 
-func writeToFile(fileName string, users []*user) {
-	file, err := os.Create(fileName)
-	defer file.Close()
+func postUser(user *user.User) {
+	time.Sleep(2e3 * time.Millisecond)
+
+	buf := bytes.NewReader(user.JSON())
+	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
 	if err != nil {
 		panic(err)
 	}
-	encoder := json.NewEncoder(file)
-	file.Write([]byte{'['})
-	for index, user := range users {
-		time.Sleep(time.Millisecond * 2e3)
-		err := encoder.Encode(user)
-		file.Write([]byte{','})
-		if err != nil {
-			panic(err)
-		}
-	}
-	file.Write([]byte{']'})
+	defer res.Body.Close()
 }
