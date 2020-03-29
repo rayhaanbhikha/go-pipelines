@@ -17,11 +17,40 @@ func main() {
 	start := time.Now()
 	users := genUserChannel("./data-set.csv")
 
-	transformedUsers := transform(users)
+	tU1 := transform(users)
+	tU2 := transform(users)
+	tU3 := transform(users)
+	tU5 := transform(users)
+	tU4 := transform(users)
 
-	post(transformedUsers)
+	post(merge(tU1, tU2, tU3, tU4, tU5))
 
 	fmt.Println("Elapsed time: ", time.Since(start))
+}
+
+func merge(input ...<-chan *user.User) <-chan *user.User {
+
+	output := make(chan *user.User)
+
+	var wg sync.WaitGroup
+	wg.Add(len(input))
+
+	for _, inputChan := range input {
+		go func(inputChan <-chan *user.User) {
+			defer wg.Done()
+			fmt.Println("waiting")
+			for input := range inputChan {
+				output <- input
+			}
+		}(inputChan)
+	}
+
+	go func() {
+		defer close(output)
+		wg.Wait()
+	}()
+
+	return output
 }
 
 func genUserChannel(filePath string) <-chan *user.User {
@@ -54,6 +83,7 @@ func transform(users <-chan *user.User) <-chan *user.User {
 	go func() {
 		defer close(transformedUsers)
 		for user := range users {
+			fmt.Println("transforming")
 			time.Sleep(time.Millisecond * 1e3)
 			user.Transform()
 			transformedUsers <- user
@@ -69,6 +99,7 @@ func post(users <-chan *user.User) {
 		user := user
 		go func() {
 			defer wg.Done()
+			fmt.Println("post user")
 			postUser(user)
 		}()
 	}
