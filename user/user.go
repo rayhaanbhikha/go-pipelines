@@ -1,6 +1,9 @@
 package user
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // User ...
 type User struct {
@@ -21,4 +24,10 @@ func (user *User) JSON() []byte {
 		panic(err)
 	}
 	return body
+}
+
+// Transform ...
+func (user *User) Transform() {
+	user.FirstName = strings.ToUpper(user.FirstName)
+	user.LastName = strings.ToUpper(user.LastName)
 }
