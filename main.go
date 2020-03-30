@@ -20,6 +20,8 @@ func checkErr(err error) {
 	}
 }
 
+const parrallelExec = 5
+
 func main() {
 
 	start := time.Now()
@@ -29,30 +31,29 @@ func main() {
 	var usercList []<-chan *user.User
 	var errcList []<-chan error
 
-	users, errc, err := genUserChannel(ctx, "./data-set.csv")
+	// generating user channel
+	genUsers, errc, err := genUserChannel(ctx, "./data-set.csv")
 	checkErr(err)
 	errcList = append(errcList, errc)
 
-	users, errc, err = transform(ctx, users)
-	checkErr(err)
-	usercList = append(usercList, users)
-	errcList = append(errcList, errc)
-
-	users, errc, err = transform(ctx, users)
-	checkErr(err)
-	usercList = append(usercList, users)
-	errcList = append(errcList, errc)
+	// transform go routine
+	for i := 0; i < parrallelExec; i++ {
+		users, errc, err := transform(ctx, genUsers)
+		checkErr(err)
+		usercList = append(usercList, users)
+		errcList = append(errcList, errc)
+	}
 
 	out := mergeUserChans(ctx, usercList...)
 
-	errc, err = post(ctx, out)
-	checkErr(err)
-	errcList = append(errcList, errc)
+	// post go routine
+	for i := 0; i < parrallelExec; i++ {
+		errc, err = post(ctx, out)
+		checkErr(err)
+		errcList = append(errcList, errc)
+	}
 
-	errc, err = post(ctx, out)
-	checkErr(err)
-	errcList = append(errcList, errc)
-
+	// merge error channels and listen
 	for e := range mergeErrChans(ctx, errcList...) {
 		fmt.Println("hello: ", e)
 		cancel()
