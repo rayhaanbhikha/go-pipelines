@@ -14,6 +14,11 @@ import (
 
 func main() {
 	start := time.Now()
+	read()
+	fmt.Println("Elapsed time: ", time.Since(start))
+}
+
+func read() {
 	file, err := os.Open("./data-set.csv")
 	defer file.Close()
 	if err != nil {
@@ -32,7 +37,6 @@ func main() {
 		transform(user)
 		postUser(user)
 	}
-	fmt.Println("Elapsed time: ", time.Since(start))
 }
 
 func transform(user *user.User) {
