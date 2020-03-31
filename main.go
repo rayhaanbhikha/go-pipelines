@@ -25,6 +25,7 @@ const parrallelExec = 5
 func main() {
 
 	start := time.Now()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*30e3)
 	defer cancel()
 
