@@ -15,7 +15,7 @@ import (
 
 func main() {
 	start := time.Now()
-	users := genUserChannel("./data-set.csv")
+	users := read("./data-set.csv")
 
 	transformedUsers := transform(users)
 
@@ -24,7 +24,7 @@ func main() {
 	fmt.Println("Elapsed time: ", time.Since(start))
 }
 
-func genUserChannel(filePath string) <-chan *user.User {
+func read(filePath string) <-chan *user.User {
 	file, err := os.Open("./data-set.csv")
 	if err != nil {
 		panic(err)
