@@ -33,7 +33,7 @@ func main() {
 	var errcList []<-chan error
 
 	// generating user channel
-	genUsers, errc, err := genUserChannel(ctx, "./data-set.csv")
+	genUsers, errc, err := read(ctx, "./data-set.csv")
 	checkErr(err)
 	errcList = append(errcList, errc)
 
@@ -64,7 +64,7 @@ func main() {
 }
 
 // source stage
-func genUserChannel(ctx context.Context, filePath string) (<-chan *user.User, <-chan error, error) {
+func read(ctx context.Context, filePath string) (<-chan *user.User, <-chan error, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, nil, err
