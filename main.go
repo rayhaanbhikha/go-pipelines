@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/rayhaanbhikha/go-pipelines/user"
@@ -62,16 +61,9 @@ func transform(users <-chan *user.User) <-chan *user.User {
 }
 
 func post(users <-chan *user.User) {
-	var wg sync.WaitGroup
 	for user := range users {
-		wg.Add(1)
-		user := user
-		go func() {
-			defer wg.Done()
-			postUser(user)
-		}()
+		postUser(user)
 	}
-	wg.Wait()
 }
 
 func postUser(user *user.User) {
