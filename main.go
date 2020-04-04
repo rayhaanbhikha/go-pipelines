@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/rayhaanbhikha/go-pipelines/user"
@@ -40,10 +39,13 @@ func main() {
 	}
 
 	out := utils.Merge(userList...)
-	_, err = post(out)
-	utils.CheckErr(err)
-	// errList = append(errList, errc)
-	fmt.Println("hi")
+
+	for i := 0; i < parrallelExec; i++ {
+		errc, err = post(out)
+		utils.CheckErr(err)
+		errList = append(errList, errc)
+	}
+
 	for err := range utils.MergeErr(errList...) {
 		fmt.Println("there was an err", err)
 		log.Fatal(err)
@@ -99,20 +101,12 @@ func transform(users <-chan *user.User) (<-chan *user.User, <-chan error, error)
 }
 
 func post(users <-chan *user.User) (<-chan error, error) {
-	var wg sync.WaitGroup
 	errc := make(chan error)
 	go func() {
-		for currentUser := range users {
-			wg.Add(1)
-			go func(user *user.User) {
-				defer wg.Done()
-				postUser(user)
-			}(currentUser)
-		}
-	}()
-	go func() {
 		defer close(errc)
-		wg.Wait()
+		for user := range users {
+			postUser(user)
+		}
 	}()
 	return errc, nil
 }
