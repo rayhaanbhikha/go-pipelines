@@ -13,6 +13,11 @@ import (
 	"github.com/rayhaanbhikha/go-pipelines/utils"
 )
 
+const (
+	transformDelay = time.Millisecond * 2e3
+	postDelay      = time.Millisecond * 3e3
+)
+
 func main() {
 	start := time.Now()
 
@@ -50,7 +55,7 @@ func transform(users <-chan *user.User) <-chan *user.User {
 	go func() {
 		defer close(transformedUsers)
 		for user := range users {
-			time.Sleep(time.Millisecond * 3e3)
+			time.Sleep(transformDelay)
 			user.Transform()
 			transformedUsers <- user
 		}
@@ -65,7 +70,7 @@ func post(users <-chan *user.User) {
 }
 
 func postUser(user *user.User) {
-	time.Sleep(3e3 * time.Millisecond)
+	time.Sleep(postDelay)
 	buf := bytes.NewReader(user.JSON())
 	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
 	utils.CheckErr(err)
