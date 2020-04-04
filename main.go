@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,15 @@ import (
 	"time"
 
 	"github.com/rayhaanbhikha/go-pipelines/user"
+	"github.com/rayhaanbhikha/go-pipelines/utils"
+)
+
+const (
+	parrallelExec        = 5
+	transformDelay       = time.Millisecond * 2e3
+	postDelay            = time.Millisecond * 3e3
+	maxPipelineDurations = time.Millisecond * 10e3
+	jsonServerURL        = "http://localhost:3000/users"
 )
 
 func checkErr(err error) {
@@ -20,50 +30,41 @@ func checkErr(err error) {
 	}
 }
 
-const parrallelExec = 5
-
 func main() {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, maxPipelineDurations)
+	defer cancel()
+	userList := make([]<-chan *user.User, 0)
+	errList := make([]<-chan error, 0)
 
 	start := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*30e3)
-	defer cancel()
+	users, errc, err := read(ctx, "./data-set.csv")
+	utils.CheckErr(err)
+	errList = append(errList, errc)
 
-	var usercList []<-chan *user.User
-	var errcList []<-chan error
-
-	// generating user channel
-	genUsers, errc, err := read(ctx, "./data-set.csv")
-	checkErr(err)
-	errcList = append(errcList, errc)
-
-	// transform go routine
 	for i := 0; i < parrallelExec; i++ {
-		users, errc, err := transform(ctx, genUsers)
-		checkErr(err)
-		usercList = append(usercList, users)
-		errcList = append(errcList, errc)
+		transformedUsers, errc, err := transform(ctx, users)
+		utils.CheckErr(err)
+		userList = append(userList, transformedUsers)
+		errList = append(errList, errc)
 	}
 
-	out := mergeUserChans(ctx, usercList...)
+	out := utils.Merge(ctx, userList...)
 
-	// post go routine
 	for i := 0; i < parrallelExec; i++ {
 		errc, err = post(ctx, out)
-		checkErr(err)
-		errcList = append(errcList, errc)
+		utils.CheckErr(err)
+		errList = append(errList, errc)
 	}
 
-	// merge error channels and listen
-	for e := range mergeErrChans(ctx, errcList...) {
-		fmt.Println("hello: ", e)
-		cancel()
+	for err := range utils.MergeErr(ctx, errList...) {
+		log.Fatal(err)
 	}
 
 	fmt.Println("Elapsed time: ", time.Since(start))
 }
 
-// source stage
 func read(ctx context.Context, filePath string) (<-chan *user.User, <-chan error, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -71,73 +72,87 @@ func read(ctx context.Context, filePath string) (<-chan *user.User, <-chan error
 	}
 	csvReader := csv.NewReader(file)
 	userChan := make(chan *user.User)
-	errC := make(chan error, 1)
+	errc := make(chan error)
 	go func() {
 		defer file.Close()
 		defer close(userChan)
-		defer close(errC)
+		defer close(errc)
 		for {
 			data, err := csvReader.Read()
 			if err == io.EOF {
 				break
 			}
 			if err != nil {
-				errC <- err
+				errc <- err
 				return
 			}
 			select {
 			case userChan <- user.NewUser(data):
 			case <-ctx.Done():
 				fmt.Println(ctx.Err().Error())
-				break
+				return
 			}
 		}
 	}()
-	return userChan, errC, nil
+	return userChan, errc, nil
 }
 
-// transformer stage
 func transform(ctx context.Context, users <-chan *user.User) (<-chan *user.User, <-chan error, error) {
 	transformedUsers := make(chan *user.User)
-	errC := make(chan error, 1)
+	errc := make(chan error)
 	go func() {
 		defer close(transformedUsers)
-		defer close(errC)
+		defer close(errc)
 		for user := range users {
-			time.Sleep(time.Millisecond * 2e3)
-			fmt.Println("transform")
+			if user.FirstName == "error" {
+				errc <- errors.New("Unrecoverable error")
+				return
+			}
+			time.Sleep(transformDelay)
 			user.Transform()
 			select {
 			case transformedUsers <- user:
 			case <-ctx.Done():
+				fmt.Println(ctx.Err().Error())
 				return
 			}
 		}
 	}()
-	return transformedUsers, errC, nil
+	return transformedUsers, errc, nil
 }
 
-// sink stage
 func post(ctx context.Context, users <-chan *user.User) (<-chan error, error) {
-	errC := make(chan error, 1)
+	errc := make(chan error)
 	go func() {
-		defer close(errC)
+		defer close(errc)
 		for user := range users {
-			fmt.Println("post user", len(users))
-			err := postUser(user)
-			if err != nil {
-				errC <- err
+			select {
+			case <-ctx.Done():
+				fmt.Println(ctx.Err().Error())
 				return
+			default:
+				fmt.Println("posting")
+				err := postUser(ctx, user)
+				if err != nil {
+					errc <- err
+					return
+				}
 			}
 		}
 	}()
-	return errC, nil
+	return errc, nil
 }
 
-func postUser(user *user.User) error {
-	time.Sleep(3e3 * time.Millisecond)
+func postUser(ctx context.Context, user *user.User) error {
+	time.Sleep(postDelay)
 	buf := bytes.NewReader(user.JSON())
-	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
+	client := &http.Client{}
+	req, err := http.NewRequestWithContext(ctx, "POST", jsonServerURL, buf)
+	req.Header.Add("Content-Type", "application/json")
+	if err != nil {
+		return err
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}
