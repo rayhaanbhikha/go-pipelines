@@ -7,20 +7,30 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/rayhaanbhikha/go-pipelines/user"
 	"github.com/rayhaanbhikha/go-pipelines/utils"
 )
 
+const parrallelExec = 5
+
 func main() {
 	start := time.Now()
 
 	users := read("./data-set.csv")
 
-	transformedUsers := transform(users)
+	userList := make([]<-chan *user.User, 0)
 
-	post(transformedUsers)
+	for i := 0; i < parrallelExec; i++ {
+		transformedUsers := transform(users)
+		userList = append(userList, transformedUsers)
+	}
+
+	out := utils.Merge(userList...)
+
+	post(out)
 
 	fmt.Println("Elapsed time: ", time.Since(start))
 }
@@ -59,9 +69,15 @@ func transform(users <-chan *user.User) <-chan *user.User {
 }
 
 func post(users <-chan *user.User) {
-	for user := range users {
-		postUser(user)
+	var wg sync.WaitGroup
+	for currentUser := range users {
+		wg.Add(1)
+		go func(user *user.User) {
+			defer wg.Done()
+			postUser(user)
+		}(currentUser)
 	}
+	wg.Wait()
 }
 
 func postUser(user *user.User) {
