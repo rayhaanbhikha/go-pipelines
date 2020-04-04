@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"sync"
 
@@ -15,7 +17,7 @@ func CheckErr(err error) {
 }
 
 // Merge ... merge user channels into one output channel.
-func Merge(inputs ...<-chan *user.User) <-chan *user.User {
+func Merge(ctx context.Context, inputs ...<-chan *user.User) <-chan *user.User {
 	output := make(chan *user.User)
 
 	var wg sync.WaitGroup
@@ -24,7 +26,12 @@ func Merge(inputs ...<-chan *user.User) <-chan *user.User {
 	sendToOutput := func(input <-chan *user.User) {
 		defer wg.Done()
 		for user := range input {
-			output <- user
+			select {
+			case output <- user:
+			case <-ctx.Done():
+				fmt.Println(ctx.Err().Error())
+				return
+			}
 		}
 	}
 
@@ -43,7 +50,7 @@ func Merge(inputs ...<-chan *user.User) <-chan *user.User {
 }
 
 // MergeErr ... merge error channels into one output channel.
-func MergeErr(inputs ...<-chan error) <-chan error {
+func MergeErr(ctx context.Context, inputs ...<-chan error) <-chan error {
 	output := make(chan error)
 
 	var wg sync.WaitGroup
@@ -52,7 +59,12 @@ func MergeErr(inputs ...<-chan error) <-chan error {
 	sendToOutput := func(input <-chan error) {
 		defer wg.Done()
 		for err := range input {
-			output <- err
+			select {
+			case output <- err:
+			case <-ctx.Done():
+				fmt.Println(ctx.Err().Error())
+				return
+			}
 		}
 	}
 
