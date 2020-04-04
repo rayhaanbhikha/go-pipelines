@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/rayhaanbhikha/go-pipelines/user"
+	"github.com/rayhaanbhikha/go-pipelines/utils"
 )
 
 func main() {
 	start := time.Now()
+
 	users := read("./data-set.csv")
 
 	transformedUsers := transform(users)
@@ -24,10 +26,8 @@ func main() {
 }
 
 func read(filePath string) <-chan *user.User {
-	file, err := os.Open("./data-set.csv")
-	if err != nil {
-		panic(err)
-	}
+	file, err := os.Open(filePath)
+	utils.CheckErr(err)
 	csvReader := csv.NewReader(file)
 	userChan := make(chan *user.User)
 	go func() {
@@ -38,9 +38,7 @@ func read(filePath string) <-chan *user.User {
 			if err == io.EOF {
 				break
 			}
-			if err != nil {
-				panic(err)
-			}
+			utils.CheckErr(err)
 			userChan <- user.NewUser(data)
 		}
 	}()
@@ -70,8 +68,6 @@ func postUser(user *user.User) {
 	time.Sleep(3e3 * time.Millisecond)
 	buf := bytes.NewReader(user.JSON())
 	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
-	if err != nil {
-		panic(err)
-	}
+	utils.CheckErr(err)
 	defer res.Body.Close()
 }
