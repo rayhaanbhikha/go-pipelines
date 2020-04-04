@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -21,73 +23,107 @@ const (
 )
 
 func main() {
+	userList := make([]<-chan *user.User, 0)
+	errList := make([]<-chan error, 0)
+
 	start := time.Now()
 
-	users := read("./data-set.csv")
-
-	userList := make([]<-chan *user.User, 0)
+	users, errc, err := read("./data-set.csv")
+	utils.CheckErr(err)
+	errList = append(errList, errc)
 
 	for i := 0; i < parrallelExec; i++ {
-		transformedUsers := transform(users)
+		transformedUsers, errc, err := transform(users)
+		utils.CheckErr(err)
 		userList = append(userList, transformedUsers)
+		errList = append(errList, errc)
 	}
 
 	out := utils.Merge(userList...)
-
-	post(out)
+	_, err = post(out)
+	utils.CheckErr(err)
+	// errList = append(errList, errc)
+	fmt.Println("hi")
+	for err := range utils.MergeErr(errList...) {
+		fmt.Println("there was an err", err)
+		log.Fatal(err)
+	}
 
 	fmt.Println("Elapsed time: ", time.Since(start))
 }
 
-func read(filePath string) <-chan *user.User {
+func read(filePath string) (<-chan *user.User, <-chan error, error) {
 	file, err := os.Open(filePath)
-	utils.CheckErr(err)
+	if err != nil {
+		return nil, nil, err
+	}
 	csvReader := csv.NewReader(file)
 	userChan := make(chan *user.User)
+	errc := make(chan error)
 	go func() {
 		defer file.Close()
 		defer close(userChan)
+		defer close(errc)
 		for {
 			data, err := csvReader.Read()
 			if err == io.EOF {
 				break
 			}
-			utils.CheckErr(err)
+			if err != nil {
+				errc <- err
+				return
+			}
 			userChan <- user.NewUser(data)
 		}
 	}()
-	return userChan
+	return userChan, errc, nil
 }
 
-func transform(users <-chan *user.User) <-chan *user.User {
+func transform(users <-chan *user.User) (<-chan *user.User, <-chan error, error) {
 	transformedUsers := make(chan *user.User)
+	errc := make(chan error)
 	go func() {
 		defer close(transformedUsers)
+		defer close(errc)
 		for user := range users {
+			if user.FirstName == "error" {
+				errc <- errors.New("Unrecoverable error")
+				return
+			}
 			time.Sleep(transformDelay)
 			user.Transform()
 			transformedUsers <- user
 		}
 	}()
-	return transformedUsers
+	return transformedUsers, errc, nil
 }
 
-func post(users <-chan *user.User) {
+func post(users <-chan *user.User) (<-chan error, error) {
 	var wg sync.WaitGroup
-	for currentUser := range users {
-		wg.Add(1)
-		go func(user *user.User) {
-			defer wg.Done()
-			postUser(user)
-		}(currentUser)
-	}
-	wg.Wait()
+	errc := make(chan error)
+	go func() {
+		for currentUser := range users {
+			wg.Add(1)
+			go func(user *user.User) {
+				defer wg.Done()
+				postUser(user)
+			}(currentUser)
+		}
+	}()
+	go func() {
+		defer close(errc)
+		wg.Wait()
+	}()
+	return errc, nil
 }
 
-func postUser(user *user.User) {
+func postUser(user *user.User) error {
 	time.Sleep(postDelay)
 	buf := bytes.NewReader(user.JSON())
 	res, err := http.Post("http://localhost:3000/users", "application/json", buf)
-	utils.CheckErr(err)
+	if err != nil {
+		return err
+	}
 	defer res.Body.Close()
+	return nil
 }

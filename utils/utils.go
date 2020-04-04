@@ -41,3 +41,31 @@ func Merge(inputs ...<-chan *user.User) <-chan *user.User {
 
 	return output
 }
+
+// MergeErr ... merge error channels into one output channel.
+func MergeErr(inputs ...<-chan error) <-chan error {
+	output := make(chan error)
+
+	var wg sync.WaitGroup
+	wg.Add(len(inputs))
+
+	sendToOutput := func(input <-chan error) {
+		defer wg.Done()
+		for err := range input {
+			output <- err
+		}
+	}
+
+	go func() {
+		for _, input := range inputs {
+			go sendToOutput(input)
+		}
+	}()
+
+	go func() {
+		defer close(output)
+		wg.Wait()
+	}()
+
+	return output
+}
