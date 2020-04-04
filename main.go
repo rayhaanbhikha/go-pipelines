@@ -47,7 +47,6 @@ func main() {
 	}
 
 	for err := range utils.MergeErr(errList...) {
-		fmt.Println("there was an err", err)
 		log.Fatal(err)
 	}
 
@@ -105,7 +104,11 @@ func post(users <-chan *user.User) (<-chan error, error) {
 	go func() {
 		defer close(errc)
 		for user := range users {
-			postUser(user)
+			err := postUser(user)
+			if err != nil {
+				errc <- err
+				return
+			}
 		}
 	}()
 	return errc, nil
